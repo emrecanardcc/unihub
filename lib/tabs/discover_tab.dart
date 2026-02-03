@@ -151,26 +151,30 @@ class _DiscoverClubsTabState extends State<DiscoverClubsTab> {
                   .collection('clubs')
                   .snapshots(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting)
+                if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
                     child: CircularProgressIndicator(color: Colors.cyan),
                   );
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty)
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                   return _buildEmptyState("Sistemde hiç kulüp yok.");
+                }
 
                 return FutureBuilder<List<DocumentSnapshot>>(
                   future: _getFilteredClubs(snapshot.data!.docs),
                   builder: (context, filteredSnapshot) {
                     if (filteredSnapshot.connectionState ==
-                        ConnectionState.waiting)
+                        ConnectionState.waiting) {
                       return const Center(
                         child: CircularProgressIndicator(color: Colors.cyan),
                       );
+                    }
                     var clubsToShow = filteredSnapshot.data ?? [];
 
                     if (clubsToShow.isEmpty) {
-                      if (_searchText.isNotEmpty)
+                      if (_searchText.isNotEmpty) {
                         return _buildEmptyState("Sonuç bulunamadı.");
+                      }
                       return _buildEmptyState(
                         "Okulundaki tüm kulüplere üyesin! 🎉",
                       );
@@ -235,7 +239,7 @@ class _DiscoverClubsTabState extends State<DiscoverClubsTab> {
     String id,
     Color color,
   ) {
-    String truncatedDesc = description.split(' ').take(25).join(' ') + "...";
+    String truncatedDesc = "${description.split(' ').take(25).join(' ')}...";
     return GestureDetector(
       onTap: () => Navigator.push(
         context,

@@ -113,11 +113,12 @@ class _UserProfileTabState extends State<UserProfileTab> {
         await user.updateDisplayName(_nameController.text.trim());
       }
       if (_newPasswordController.text.isNotEmpty) {
-        if (_newPasswordController.text.length < 6)
+        if (_newPasswordController.text.length < 6) {
           throw FirebaseAuthException(
             code: 'weak-password',
             message: "Yeni şifre en az 6 karakter olmalı.",
           );
+        }
         await user.updatePassword(_newPasswordController.text.trim());
       }
       if (mounted) {
@@ -131,14 +132,15 @@ class _UserProfileTabState extends State<UserProfileTab> {
       }
     } on FirebaseAuthException catch (e) {
       String msg = "Bir hata oluştu.";
-      if (e.code == 'wrong-password')
+      if (e.code == 'wrong-password') {
         msg = "Mevcut şifreyi yanlış girdiniz.";
-      else if (e.code == 'weak-password')
+      } else if (e.code == 'weak-password')
         msg = "Yeni şifre çok zayıf.";
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(msg), backgroundColor: Colors.red),
         );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

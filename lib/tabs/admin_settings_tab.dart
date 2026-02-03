@@ -99,13 +99,14 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
               'secondaryColor': _colorToHex(secondaryColor),
             },
           });
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Ayarlar güncellendi!"),
             backgroundColor: Colors.green,
           ),
         );
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Hata: $e"), backgroundColor: Colors.red),

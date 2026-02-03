@@ -7,9 +7,66 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:1044448088575:android:d2528fb5314a98f55d97ca",
+        "android_client_info": {
+          "package_name": "com.emrecan.cepkampus"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDYl5FaXpiGjKjRKAidyrnXWxL7lti2CcU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:1044448088575:android:0d5f73650ffec8205d97ca",
         "android_client_info": {
           "package_name": "com.example.unihub"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDYl5FaXpiGjKjRKAidyrnXWxL7lti2CcU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1044448088575:android:1e1528ce909e45935d97ca",
+        "android_client_info": {
+          "package_name": "com.example.unihubmvp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDYl5FaXpiGjKjRKAidyrnXWxL7lti2CcU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1044448088575:android:7c2168892a806bf75d97ca",
+        "android_client_info": {
+          "package_name": "com.unihub.app"
         }
       },
       "oauth_client": [],

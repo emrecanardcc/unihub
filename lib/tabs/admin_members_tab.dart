@@ -323,8 +323,9 @@ class _AdminMembersTabState extends State<AdminMembersTab> {
           .collection('members')
           .snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData)
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
 
         var docs = snapshot.data!.docs;
         docs.sort((a, b) {

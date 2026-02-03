@@ -73,10 +73,11 @@ class _SponsorManagerState extends State<SponsorManager> {
     _nameController.clear();
     _descController.clear();
     _urlController.clear();
-    if (mounted)
+    if (mounted) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text("Sponsor Eklendi!")));
+    }
   }
 
   Future<void> _deleteSponsor(String id) async {
@@ -148,8 +149,9 @@ class _SponsorManagerState extends State<SponsorManager> {
                 .orderBy('createdAt', descending: true)
                 .snapshots(),
             builder: (context, snapshot) {
-              if (!snapshot.hasData)
+              if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
+              }
               return ListView.builder(
                 padding: const EdgeInsets.all(20),
                 itemCount: snapshot.data!.docs.length,
@@ -218,10 +220,11 @@ class _ClubCreatorState extends State<ClubCreator> {
     _shortNameController.clear();
     _descController.clear();
     _categoryController.clear();
-    if (mounted)
+    if (mounted) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text("Kulüp Oluşturuldu!")));
+    }
   }
 
   @override
@@ -240,7 +243,7 @@ class _ClubCreatorState extends State<ClubCreator> {
 
             // YENİ: Üniversite Seçim Kutusu
             DropdownButtonFormField<String>(
-              value: _selectedUni,
+              initialValue: _selectedUni,
               decoration: const InputDecoration(
                 labelText: "Üniversite",
                 border: OutlineInputBorder(),
@@ -378,18 +381,20 @@ class AllClubsManager extends StatelessWidget {
             .collection('clubs')
             .doc(clubId)
             .delete();
-        if (context.mounted)
+        if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text("Kulüp silindi."),
               backgroundColor: Colors.green,
             ),
           );
+        }
       } catch (e) {
-        if (context.mounted)
+        if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text("Hata: $e"), backgroundColor: Colors.red),
           );
+        }
       }
     }
   }
@@ -399,11 +404,13 @@ class AllClubsManager extends StatelessWidget {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('clubs').snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData)
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
         var clubs = snapshot.data!.docs;
-        if (clubs.isEmpty)
+        if (clubs.isEmpty) {
           return const Center(child: Text("Kayıtlı kulüp yok."));
+        }
 
         return Padding(
           padding: const EdgeInsets.all(20),

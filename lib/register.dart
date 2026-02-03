@@ -86,9 +86,9 @@ class _kayitEkraniState extends State<kayitEkrani> {
       }
     } on FirebaseAuthException catch (e) {
       String hata = "Hata oluştu";
-      if (e.code == 'email-already-in-use')
+      if (e.code == 'email-already-in-use') {
         hata = "Bu numara zaten kayıtlı.";
-      else if (e.code == 'weak-password')
+      } else if (e.code == 'weak-password')
         hata = "Şifre zayıf.";
 
       if (context.mounted) {
