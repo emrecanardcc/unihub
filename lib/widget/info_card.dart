@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/glass_components.dart';
 
 class InfoCard extends StatelessWidget {
   final String title;
@@ -16,16 +17,10 @@ class InfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return AuraGlassCard(
       width: double.infinity,
       padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [
-          BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10),
-        ],
-      ),
+      accentColor: color,
       child: Row(
         children: [
           Icon(icon, color: color, size: 30),
@@ -35,13 +30,14 @@ class InfoCard extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                style: TextStyle(fontSize: 12, color: Colors.white70),
               ),
               Text(
                 value,
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.bold,
+                  color: Colors.white,
                 ),
               ),
             ],

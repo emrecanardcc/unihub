@@ -1,285 +1,379 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:unihub/register.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:unihub/main_hub.dart';
+import 'package:unihub/register_modern.dart';
+import 'package:unihub/utils/glass_components.dart';
+import 'package:unihub/services/auth_service.dart';
+import 'package:unihub/services/database_service.dart';
+import 'package:unihub/models/university.dart';
 
-class girisEkrani extends StatefulWidget {
-  const girisEkrani({super.key});
+class GirisEkrani extends StatefulWidget {
+  const GirisEkrani({super.key});
 
   @override
-  State<girisEkrani> createState() => _girisEkraniState();
+  State<GirisEkrani> createState() => _GirisEkraniState();
 }
 
-class _girisEkraniState extends State<girisEkrani> {
-  final TextEditingController _numarakontrol = TextEditingController();
+class _GirisEkraniState extends State<GirisEkrani> {
+  final TextEditingController _emailController = TextEditingController();
   final TextEditingController _sifrekontrol = TextEditingController();
+  final AuthService _authService = AuthService();
+  final DatabaseService _dbService = DatabaseService();
 
-  // Üniversite Domain Listesi
-  final Map<String, String> _universities = {
-    "ESOGU": "@ogrenci.ogu.edu.tr",
-    "Anadolu": "@anadolu.edu.tr",
-    "ESTÜ": "@ogrenci.estu.edu.tr",
-  };
-
-  String _selectedUniKey = "ESOGU"; // Varsayılan seçim
+  List<University> _universities = [];
+  // University? _selectedUniversity;
   bool _isLoading = false;
-  bool _isObscured = true;
+  final bool _isObscured = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUniversities();
+  }
+
+  Future<void> _showForgotPasswordDialog() async {
+    final emailController = TextEditingController();
+    
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: AuraGlassCard(
+          margin: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(24),
+          borderRadius: 32,
+          accentColor: AuraTheme.kAccentCyan,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.lock_reset_rounded, color: AuraTheme.kAccentCyan, size: 28),
+                  SizedBox(width: 12),
+                  Text(
+                    "ŞİFRE SIFIRLA",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                "Email adresinize şifre sıfırlama bağlantısı göndereceğiz.",
+                style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.5),
+              ),
+              const SizedBox(height: 24),
+              AuraGlassTextField(
+                controller: emailController,
+                hintText: "Email adresinizi girin",
+                icon: Icons.alternate_email_rounded,
+                keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 32),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text("İPTAL", style: TextStyle(color: Colors.white54, fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AuraTheme.kAccentCyan,
+                        foregroundColor: Colors.black,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                      onPressed: () async {
+                        Navigator.pop(context);
+                        await _resetPassword(emailController.text.trim());
+                      },
+                      child: const Text("GÖNDER", style: TextStyle(fontWeight: FontWeight.w900)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _resetPassword(String email) async {
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Lütfen email adresinizi girin")),
+      );
+      return;
+    }
+
+    try {
+      await Supabase.instance.client.auth.resetPasswordForEmail(
+        email,
+        redirectTo: 'https://your-app-url.com/login', // TODO: Uygulama URL'nizi ayarlayın
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Şifre sıfırlama bağlantısı email adresinize gönderildi."),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Hata: $e")),
+        );
+      }
+    }
+  }
+
+  Future<void> _loadUniversities() async {
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+    try {
+      final unis = await _dbService.getUniversities();
+      if (mounted) {
+        setState(() {
+          _universities = unis;
+          if (_universities.isNotEmpty) {
+            // _selectedUniversity = _universities.first;
+          }
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Üniversiteler yüklenemedi: $e"),
+            action: SnackBarAction(
+              label: "Tekrar Dene",
+              onPressed: _loadUniversities,
+            ),
+          ),
+        );
+      }
+    }
+  }
 
   @override
   void dispose() {
-    _numarakontrol.dispose();
+    _emailController.dispose();
     _sifrekontrol.dispose();
     super.dispose();
   }
 
   Future<void> _girisYap() async {
-    if (_numarakontrol.text.isEmpty || _sifrekontrol.text.isEmpty) {
+    if (_emailController.text.isEmpty || _sifrekontrol.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Lütfen okul no ve şifrenizi girin")),
+        const SnackBar(content: Text("Lütfen e-posta ve şifrenizi girin")),
       );
       return;
     }
 
     setState(() => _isLoading = true);
 
-    // Seçilen üniversitenin domainini alıp birleştiriyoruz
-    final String domain = _universities[_selectedUniKey]!;
-    final String tamEposta = '${_numarakontrol.text.trim()}$domain';
-
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: tamEposta,
+      await _authService.signIn(
+        email: _emailController.text.trim(),
         password: _sifrekontrol.text.trim(),
       );
 
-      if (context.mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const MainHub()),
-        );
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const MainHub()),
+      );
+    } on AuthException catch (e) {
+      String hataMesaji = "Giriş başarısız: ${e.message}";
+      if (e.message.contains("Invalid login credentials")) {
+        hataMesaji = "E-posta veya şifre hatalı.";
       }
-    } on FirebaseAuthException catch (e) {
-      String hataMesaji = "Giriş başarısız.";
-      if (e.code == 'user-not-found' || e.code == 'invalid-credential') {
-        hataMesaji = "Okul numarası veya şifre hatalı.";
-      } else if (e.code == 'wrong-password') {
-        hataMesaji = "Şifre yanlış.";
-      }
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(hataMesaji), backgroundColor: Colors.red),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(hataMesaji), backgroundColor: Colors.red),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Beklenmedik bir hata: $e"), backgroundColor: Colors.red),
+      );
     } finally {
-      if (context.mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7F8FC),
+    return AuraScaffold(
+      auraColor: AuraTheme.kAccentCyan,
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.school, size: 80, color: Colors.cyan),
-              const SizedBox(height: 16),
-              const Text(
-                "Tekrar Hoş Geldin!",
-                style: TextStyle(
-                  fontSize: 30,
-                  color: Colors.cyan,
-                  fontWeight: FontWeight.w700,
+              // Logo / Icon
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: AuraTheme.kAccentCyan.withValues(alpha: 0.1),
+                  border: Border.all(color: AuraTheme.kAccentCyan.withValues(alpha: 0.2)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AuraTheme.kAccentCyan.withValues(alpha: 0.15),
+                      blurRadius: 40,
+                      spreadRadius: 2,
+                    )
+                  ],
                 ),
+                child: const Icon(
+                  Icons.school_rounded,
+                  size: 64,
+                  color: AuraTheme.kAccentCyan,
+                ),
+              ),
+              const SizedBox(height: 32),
+              
+              const Text(
+                "UniHub",
+                style: AuraTheme.kHeadingDisplay,
               ),
               const SizedBox(height: 8),
               Text(
-                "Giriş yapmak için bilgilerini gir",
-                style: TextStyle(fontSize: 16, color: Colors.grey[700]),
+                "Kampüsün Dijital Kalbi",
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.white.withValues(alpha: 0.5),
+                  letterSpacing: 2,
+                  fontWeight: FontWeight.w900,
+                ),
               ),
-              const SizedBox(height: 40),
+              const SizedBox(height: 48),
 
               // --- BİRLEŞTİRİLMİŞ GİRİŞ ALANI ---
-              // Öğrenci Numarası TextField'ının içine Dropdown'ı gömdük
-              TextField(
-                controller: _numarakontrol,
-                keyboardType: TextInputType.text,
-                decoration: InputDecoration(
-                  hintText: "Öğrenci No",
-                  prefixIcon: const Icon(
-                    Icons.badge_outlined,
-                    color: Colors.grey,
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(
-                    vertical: 18,
-                    horizontal: 12,
-                  ),
-
-                  // SAĞ TARAFA GÖMÜLÜ DROPDOWN
-                  suffixIcon: Container(
-                    margin: const EdgeInsets.only(right: 5),
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.cyan.withOpacity(
-                        0.1,
-                      ), // Hafif mavi arka plan
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: _selectedUniKey,
-                        icon: const Icon(
-                          Icons.arrow_drop_down,
-                          color: Colors.cyan,
-                        ),
-                        style: const TextStyle(
-                          color: Colors.cyan,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                        // Açılır menü arka planı
-                        dropdownColor: Colors.white,
-                        items: _universities.keys.map((String key) {
-                          return DropdownMenuItem<String>(
-                            value: key,
-                            child: Text(
-                              key,
-                            ), // Sadece okul adı (ESOGU vb.) görünür
-                          );
-                        }).toList(),
-                        onChanged: (String? newValue) {
-                          setState(() {
-                            _selectedUniKey = newValue!;
-                          });
-                        },
-                      ),
-                    ),
-                  ),
-                  // Kenarlık ayarları
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12.0),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12.0),
-                    borderSide: const BorderSide(
-                      color: Colors.cyan,
-                      width: 2.0,
-                    ),
-                  ),
-                ),
-              ),
-
-              // Bilgilendirme Metni (Hangi mail uzantısının seçildiğini gösterir)
-              Padding(
-                padding: const EdgeInsets.only(top: 8.0, left: 12),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    "Seçili uzantı: ${_universities[_selectedUniKey]}",
-                    style: TextStyle(
-                      color: Colors.grey.shade500,
-                      fontSize: 12,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              // --- ŞİFRE ---
-              TextField(
-                controller: _sifrekontrol,
-                obscureText: _isObscured,
-                decoration: InputDecoration(
-                  hintText: "••••••••••",
-                  prefixIcon: const Icon(
-                    Icons.lock_outline,
-                    color: Colors.grey,
-                  ),
-                  suffixIcon: IconButton(
-                    onPressed: () => setState(() => _isObscured = !_isObscured),
-                    icon: Icon(
-                      _isObscured ? Icons.visibility_off : Icons.visibility,
-                      color: Colors.grey,
-                    ),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 18),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12.0),
-                    borderSide: BorderSide.none,
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12.0),
-                    borderSide: const BorderSide(
-                      color: Colors.cyan,
-                      width: 2.0,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 30),
-
-              _isLoading
-                  ? const CircularProgressIndicator(color: Colors.cyan)
-                  : ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.cyan,
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size(
-                          double.infinity,
-                          55,
-                        ), // Biraz daha yüksek buton
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12.0),
-                        ),
-                        elevation: 2,
-                      ),
-                      onPressed: _girisYap,
-                      child: const Text(
-                        "Giriş Yap",
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    "Hesabın yok mu?",
-                    style: TextStyle(color: Colors.grey[700]),
-                  ),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const kayitEkrani(),
-                        ),
-                      );
-                    },
-                    child: const Text(
-                      "Kayıt Ol",
+              AuraGlassCard(
+                padding: const EdgeInsets.all(24),
+                accentColor: AuraTheme.kAccentCyan,
+                showGlow: true,
+                child: Column(
+                  children: [
+                    const Text(
+                      "GİRİŞ YAP",
                       style: TextStyle(
-                        color: Colors.cyan,
-                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 16,
+                        letterSpacing: 2,
                       ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 32),
+                    
+                    // E-posta
+                    AuraGlassTextField(
+                      controller: _emailController,
+                      hintText: "E-posta Adresi",
+                      icon: Icons.alternate_email_rounded,
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    
+                    const SizedBox(height: 16),
+
+                    // Şifre
+                    AuraGlassTextField(
+                      controller: _sifrekontrol,
+                      hintText: "Şifre",
+                      obscureText: _isObscured,
+                      icon: Icons.lock_outline_rounded,
+                    ),
+                    
+                    const SizedBox(height: 8),
+                    
+                    // Şifremi Unuttum
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _showForgotPasswordDialog,
+                        child: const Text(
+                          "Şifremi Unuttum",
+                          style: TextStyle(
+                            color: AuraTheme.kAccentCyan,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 24),
+
+                    // Giriş Butonu
+                    _isLoading
+                        ? const Center(child: CircularProgressIndicator(color: AuraTheme.kAccentCyan))
+                        : SizedBox(
+                            width: double.infinity,
+                            height: 56,
+                            child: ElevatedButton(
+                              onPressed: _girisYap,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AuraTheme.kAccentCyan,
+                                foregroundColor: Colors.black,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                elevation: 0,
+                              ),
+                              child: const Text(
+                                "BAŞLAT",
+                                style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2),
+                              ),
+                            ),
+                          ),
+                  ],
+                ),
               ),
+
+              const SizedBox(height: 32),
+              
+              // Kayıt Ol Linki
+              TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const ModernRegisterScreen()),
+                  );
+                },
+                child: RichText(
+                  text: TextSpan(
+                    text: "Hesabın yok mu? ",
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+                    children: const [
+                      TextSpan(
+                        text: "Kayıt Ol",
+                        style: TextStyle(
+                          color: AuraTheme.kAccentCyan,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 40),
             ],
           ),
         ),

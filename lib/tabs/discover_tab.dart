@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:unihub/screen_test.dart';
 import 'package:unihub/utils/hex_color.dart';
+import 'package:unihub/utils/glass_components.dart';
+import 'package:unihub/tabs/club_detail_page.dart';
+import 'package:unihub/services/auth_service.dart';
+import 'package:unihub/services/database_service.dart';
+import 'package:unihub/models/club.dart';
+import 'package:unihub/models/profile.dart';
+import 'package:unihub/widgets/aura_pull_to_refresh.dart';
 
 class DiscoverClubsTab extends StatefulWidget {
   const DiscoverClubsTab({super.key});
@@ -12,8 +16,64 @@ class DiscoverClubsTab extends StatefulWidget {
 }
 
 class _DiscoverClubsTabState extends State<DiscoverClubsTab> {
+  final AuthService _authService = AuthService();
+  final DatabaseService _dbService = DatabaseService();
   final TextEditingController _searchController = TextEditingController();
+  
   String _searchText = "";
+  List<Club> _allClubs = [];
+  List<Club> _filteredClubs = [];
+  bool _isLoading = true;
+  Profile? _profile;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInitialData();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  Future<void> _loadInitialData() async {
+    setState(() => _isLoading = true);
+    try {
+      _profile = await _authService.getCurrentProfile();
+      if (_profile != null && _profile!.universityId != null) {
+        _allClubs = await _dbService.getDiscoverableClubs(
+          _profile!.id,
+          _profile!.universityId!,
+        );
+        _applyFilter();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Kulüpler yüklenemedi: $e")),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _onSearchChanged() {
+    setState(() {
+      _searchText = _searchController.text;
+      _applyFilter();
+    });
+  }
+
+  void _applyFilter() {
+    if (_searchText.isEmpty) {
+      _filteredClubs = _allClubs;
+    } else {
+      final searchLower = _searchText.toLowerCase();
+      _filteredClubs = _allClubs.where((club) {
+        return club.name.toLowerCase().contains(searchLower) ||
+            club.description.toLowerCase().contains(searchLower) ||
+            club.tags.any((tag) => tag.toLowerCase().contains(searchLower));
+      }).toList();
+    }
+  }
 
   @override
   void dispose() {
@@ -21,208 +81,57 @@ class _DiscoverClubsTabState extends State<DiscoverClubsTab> {
     super.dispose();
   }
 
-  // 1. Mailden Üniversiteyi Tespit Et
-  String _getUniversityFromEmail(String email) {
-    if (email.endsWith('@anadolu.edu.tr')) return "Anadolu";
-    if (email.endsWith('@ogrenci.estu.edu.tr')) return "ESTÜ";
-    return "ESOGU"; // Varsayılan veya @ogrenci.ogu.edu.tr
-  }
-
-  // 2. Filtreleme (Kendi okulum + Üye olmadıklarım + Arama)
-  Future<List<DocumentSnapshot>> _getFilteredClubs(
-    List<DocumentSnapshot> allClubs,
-  ) async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null || user.email == null) return [];
-
-    // Kullanıcının okulu
-    String myUni = _getUniversityFromEmail(user.email!);
-
-    List<DocumentSnapshot> filteredClubs = [];
-
-    for (var club in allClubs) {
-      var data = club.data() as Map<String, dynamic>;
-
-      // A) OKUL KONTROLÜ: Sadece benim okulumu göster!
-      // (Eski kayıtlarda 'university' yoksa varsayılan olarak ESOGU kabul et)
-      String clubUni = data['university'] ?? "ESOGU";
-      if (clubUni != myUni) continue;
-
-      // B) ÜYELİK KONTROLÜ: Zaten üye olduklarımı gösterme
-      var memberDoc = await club.reference
-          .collection('members')
-          .doc(user.uid)
-          .get();
-      if (memberDoc.exists) continue;
-
-      // C) ARAMA FİLTRESİ
-      if (_searchText.isNotEmpty) {
-        String name = (data['clubName'] ?? "").toString().toLowerCase();
-        String shortName = (data['shortName'] ?? "").toString().toLowerCase();
-        String searchLower = _searchText.toLowerCase();
-        if (!name.contains(searchLower) && !shortName.contains(searchLower)) {
-          continue;
-        }
-      }
-
-      filteredClubs.add(club);
-    }
-
-    return filteredClubs;
-  }
-
   @override
   Widget build(BuildContext context) {
-    // ... (Tasarım kodları öncekiyle AYNIDIR, sadece _getFilteredClubs değişti) ...
-    return Scaffold(
-      backgroundColor: const Color(0xFFF0F2F5),
-      appBar: AppBar(
-        title: const Text(
-          "Kulüp Keşfet",
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            color: Colors.white,
-            fontSize: 24,
-          ),
-        ),
-        centerTitle: false,
-        backgroundColor: Colors.cyan,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0),
-            child: Icon(
-              Icons.explore,
-              color: Colors.white.withOpacity(0.8),
-              size: 30,
-            ),
-          ),
-        ],
-      ),
+    return AuraScaffold(
+      auraColor: AuraTheme.kAccentCyan,
       body: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
-            decoration: const BoxDecoration(
-              color: Colors.cyan,
-              borderRadius: BorderRadius.vertical(bottom: Radius.circular(30)),
-            ),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(15),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 10,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: TextField(
-                controller: _searchController,
-                onChanged: (value) => setState(() => _searchText = value),
-                decoration: InputDecoration(
-                  hintText: "İlgi alanına göre ara...",
-                  hintStyle: TextStyle(color: Colors.grey.shade400),
-                  prefixIcon: const Icon(Icons.search, color: Colors.cyan),
-                  suffixIcon: _searchText.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear, color: Colors.grey),
-                          onPressed: () => setState(() {
-                            _searchController.clear();
-                            _searchText = "";
-                          }),
-                        )
-                      : null,
-                  border: InputBorder.none,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 15,
-                  ),
-                ),
-              ),
+          // --- SEARCH BAR ---
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 20, 24, 10),
+            child: AuraGlassTextField(
+              controller: _searchController,
+              hintText: "İlgi alanına göre ara...",
+              icon: Icons.search_rounded,
             ),
           ),
+
+          // --- CLUB LIST ---
           Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('clubs')
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(color: Colors.cyan),
-                  );
-                }
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return _buildEmptyState("Sistemde hiç kulüp yok.");
-                }
-
-                return FutureBuilder<List<DocumentSnapshot>>(
-                  future: _getFilteredClubs(snapshot.data!.docs),
-                  builder: (context, filteredSnapshot) {
-                    if (filteredSnapshot.connectionState ==
-                        ConnectionState.waiting) {
-                      return const Center(
-                        child: CircularProgressIndicator(color: Colors.cyan),
-                      );
-                    }
-                    var clubsToShow = filteredSnapshot.data ?? [];
-
-                    if (clubsToShow.isEmpty) {
-                      if (_searchText.isNotEmpty) {
-                        return _buildEmptyState("Sonuç bulunamadı.");
-                      }
-                      return _buildEmptyState(
-                        "Okulundaki tüm kulüplere üyesin! 🎉",
-                      );
-                    }
-
-                    return ListView.builder(
-                      padding: const EdgeInsets.all(16),
-                      itemCount: clubsToShow.length,
-                      itemBuilder: (context, index) {
-                        var doc = clubsToShow[index];
-                        var data = doc.data() as Map<String, dynamic>;
-                        Color clubColor = hexToColor(
-                          data['theme']?['primaryColor'] ?? "0xFF00BCD4",
-                        );
-
-                        // 3D Kart Tasarımı (Önceki kodla aynı)
-                        return _build3DClubCard(
-                          context,
-                          data['clubName'] ?? 'İsimsiz',
-                          data['shortName'] ?? '?',
-                          data['category'] ?? 'Genel',
-                          data['description'] ?? '',
-                          doc.id,
-                          clubColor,
-                        );
-                      },
-                    );
-                  },
-                );
-              },
-            ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _filteredClubs.isEmpty
+                    ? _buildEmptyState(_searchText.isNotEmpty
+                        ? "Sonuç bulunamadı."
+                        : "Okulundaki tüm kulüplere üyesin! 🎉")
+                    : AuraPullToRefresh(
+                        onRefresh: _loadInitialData,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(24, 10, 24, 100),
+                          itemCount: _filteredClubs.length,
+                          itemBuilder: (context, index) {
+                            final club = _filteredClubs[index];
+                            return _buildAuraClubCard(context, club);
+                          },
+                        ),
+                      ),
           ),
         ],
       ),
     );
   }
 
-  // --- (3D Kart Tasarımı ve EmptyState kodları önceki cevabımdan alınıp buraya eklenebilir, yer kaplamasın diye kısalttım) ---
   Widget _buildEmptyState(String message) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.saved_search, size: 80, color: Colors.grey.shade300),
-          const SizedBox(height: 15),
+          Icon(Icons.auto_awesome_rounded, size: 64, color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.2)),
+          const SizedBox(height: 16),
           Text(
             message,
-            style: TextStyle(color: Colors.grey.shade500, fontSize: 16),
+            style: TextStyle(color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.5), fontSize: 16),
             textAlign: TextAlign.center,
           ),
         ],
@@ -230,148 +139,163 @@ class _DiscoverClubsTabState extends State<DiscoverClubsTab> {
     );
   }
 
-  Widget _build3DClubCard(
-    BuildContext context,
-    String name,
-    String shortName,
-    String category,
-    String description,
-    String id,
-    Color color,
-  ) {
-    String truncatedDesc = "${description.split(' ').take(25).join(' ')}...";
-    return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ScreenTest(kulupId: id, kulupismi: name),
-        ),
-      ),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.15),
-              offset: const Offset(0, 10),
-              blurRadius: 20,
-              spreadRadius: -5,
+  Widget _buildAuraClubCard(BuildContext context, Club club) {
+    final Color clubColor = hexToColor(club.mainColor);
+    final String logoUrl = _dbService.getPublicUrl('clubs', club.logoPath);
+    final ColorScheme colorScheme = Theme.of(context).colorScheme;
+    final Color onSurface = colorScheme.onSurface;
+    final Color muted = onSurface.withValues(alpha: 0.6);
+    final Color subtle = onSurface.withValues(alpha: 0.45);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: AuraGlassCard(
+        padding: EdgeInsets.zero,
+        borderRadius: 32,
+        accentColor: clubColor,
+        showGlow: true,
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => ClubDetailPage(club: club),
             ),
-            BoxShadow(
-              color: Colors.grey.shade300,
-              offset: const Offset(0, 4),
-              blurRadius: 10,
-            ),
-          ],
-        ),
+          );
+        },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(20),
-                ),
-                border: Border(
-                  bottom: BorderSide(color: color.withOpacity(0.1), width: 1),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: color.withOpacity(0.2),
-                          blurRadius: 8,
-                          offset: const Offset(0, 3),
-                        ),
+            // Header with Gradient Overlay
+            Stack(
+              children: [
+                Container(
+                  height: 100,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        clubColor.withValues(alpha: 0.25),
+                        clubColor.withValues(alpha: 0.05),
+                        Colors.transparent,
                       ],
                     ),
-                    child: Text(
-                      shortName,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w900,
-                        color: color,
-                      ),
-                    ),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
                   ),
-                  const SizedBox(width: 15),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: color.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            category.toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: color.withOpacity(0.8),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 60,
+                        height: 60,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: clubColor.withValues(alpha: 0.4), width: 2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: clubColor.withValues(alpha: 0.2),
+                              blurRadius: 15,
+                              spreadRadius: 2,
                             ),
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
+                        child: ClipOval(
+                          child: logoUrl.isNotEmpty
+                              ? Image.network(logoUrl, fit: BoxFit.cover)
+                              : Center(
+                                  child: Text(
+                                    club.shortName,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w900,
+                                      color: clubColor,
+                                      fontSize: 20,
+                                    ),
+                                  ),
+                                ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              club.name,
+                              style: TextStyle(
+                                fontSize: 19,
+                                fontWeight: FontWeight.w900,
+                                color: onSurface,
+                                letterSpacing: 0.5,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: clubColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: clubColor.withValues(alpha: 0.2)),
+                              ),
+                              child: Text(
+                                club.category.toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: clubColor,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
-                  Icon(
-                    Icons.arrow_forward_ios_rounded,
-                    color: color.withOpacity(0.5),
-                    size: 20,
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Text(
-                truncatedDesc,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.grey.shade600,
-                  height: 1.5,
                 ),
-              ),
+              ],
             ),
+            // Description & Tags
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    "Detayları Gör",
+                    club.description,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: color,
-                      fontSize: 13,
+                      color: muted,
+                      fontSize: 14,
+                      height: 1.6,
+                      fontWeight: FontWeight.w500,
                     ),
+                  ),
+                  const SizedBox(height: 20),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: club.tags.take(3).map((tag) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: colorScheme.surface.withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: onSurface.withValues(alpha: 0.12)),
+                        ),
+                        child: Text(
+                          "#$tag",
+                          style: TextStyle(
+                            color: subtle,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      );
+                    }).toList(),
                   ),
                 ],
               ),

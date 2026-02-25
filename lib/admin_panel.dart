@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:unihub/utils/glass_components.dart';
 import 'package:unihub/tabs/admin_requests_tab.dart';
 import 'package:unihub/tabs/admin_events_tab.dart';
 import 'package:unihub/tabs/admin_members_tab.dart';
@@ -58,24 +59,53 @@ class _AdminPanelState extends State<AdminPanel> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.grey[100],
+    final Color onSurface = Theme.of(context).colorScheme.onSurface;
+    return AuraScaffold(
+      auraColor: widget.primaryColor,
       appBar: AppBar(
-        backgroundColor: widget.primaryColor,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.chevron_left_rounded, color: onSurface, size: 32),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: Text(
           "${widget.kulupismi} Yönetimi",
-          style: const TextStyle(color: Colors.white, fontSize: 18),
+          style: TextStyle(
+            color: onSurface,
+            fontWeight: FontWeight.w900,
+            fontSize: 20,
+            letterSpacing: -0.5,
+          ),
         ),
-        bottom: TabBar(
-          controller: _tabController,
-          isScrollable: true,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
-          tabs: _getTabs(),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(60),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: AuraGlassCard(
+              padding: const EdgeInsets.all(4),
+              borderRadius: 20,
+              child: TabBar(
+                controller: _tabController,
+                isScrollable: true,
+                indicator: BoxDecoration(
+                  color: widget.primaryColor,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                labelColor: Colors.black,
+                unselectedLabelColor: onSurface.withValues(alpha: 0.6),
+                dividerColor: Colors.transparent,
+                indicatorSize: TabBarIndicatorSize.tab,
+                tabs: _getTabs(),
+              ),
+            ),
+          ),
         ),
       ),
-      body: TabBarView(controller: _tabController, children: _getTabViews()),
+      body: TabBarView(
+        controller: _tabController,
+        children: _getTabViews(),
+      ),
     );
   }
 
@@ -94,10 +124,18 @@ class _AdminPanelState extends State<AdminPanel> with TickerProviderStateMixin {
   }
 
   List<Widget> _getTabViews() {
-    List<Widget> views = [AdminRequestsTab(kulupId: widget.kulupId)];
+    List<Widget> views = [
+      AdminRequestsTab(
+        kulupId: widget.kulupId,
+        primaryColor: widget.primaryColor,
+      )
+    ];
 
     if (widget.currentUserRole != 'uye') {
-      views.add(AdminEventsTab(kulupId: widget.kulupId));
+      views.add(AdminEventsTab(
+        kulupId: widget.kulupId,
+        primaryColor: widget.primaryColor,
+      ));
     }
 
     if (widget.currentUserRole == 'baskan') {
@@ -107,6 +145,7 @@ class _AdminPanelState extends State<AdminPanel> with TickerProviderStateMixin {
           kulupId: widget.kulupId,
           currentUserRole: widget.currentUserRole,
           isSuperAdmin: widget.isSuperAdmin,
+          primaryColor: widget.primaryColor,
         ),
       );
       views.add(

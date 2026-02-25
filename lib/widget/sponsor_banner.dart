@@ -1,20 +1,27 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../services/database_service.dart';
+import '../models/sponsor.dart';
 
-class SponsorBanner extends StatelessWidget {
+class SponsorBanner extends StatefulWidget {
   const SponsorBanner({super.key});
 
   @override
+  State<SponsorBanner> createState() => _SponsorBannerState();
+}
+
+class _SponsorBannerState extends State<SponsorBanner> {
+  final DatabaseService _dbService = DatabaseService();
+
+  @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      // Sadece gerçek veritabanını dinle
-      stream: FirebaseFirestore.instance
-          .collection('app_sponsors')
-          .orderBy('createdAt', descending: true)
-          .snapshots(),
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: Supabase.instance.client
+          .from('app_sponsors')
+          .select('*')
+          .order('created_at', ascending: false)
+          .timeout(const Duration(seconds: 15)),
       builder: (context, snapshot) {
-        // 1. Yükleniyor veya Hata Durumu
-        if (snapshot.hasError) return const SizedBox(); // Hata varsa gizle
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const SizedBox(
             height: 160,
@@ -22,195 +29,97 @@ class SponsorBanner extends StatelessWidget {
           );
         }
 
-        // 2. Veri Yoksa Gizle
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
           return const SizedBox();
         }
 
-        var sponsors = snapshot.data!.docs;
+        final sponsors = snapshot.data!.map((json) => Sponsor.fromJson(json)).toList();
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 10, 20, 10),
-              child: Row(
-                children: [
-                  Icon(Icons.stars, color: Colors.amber, size: 24),
-                  SizedBox(width: 8),
-                  Text(
-                    "Fırsatlar & Sponsorlar",
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black87,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // YATAY KAYDIRILABİLİR BANNER ALANI
-            SizedBox(
-              height: 160, // Banner yüksekliği
-              child: PageView.builder(
-                controller: PageController(
-                  viewportFraction: 0.9,
-                ), // Yan kartların ucu görünsün
-                itemCount: sponsors.length,
-                itemBuilder: (context, index) {
-                  var data = sponsors[index].data() as Map<String, dynamic>;
-                  return _buildPremiumCard(data);
-                },
-              ),
-            ),
-            const SizedBox(height: 20),
-          ],
+        return SizedBox(
+          height: 180,
+          child: PageView.builder(
+            controller: PageController(viewportFraction: 0.9),
+            itemCount: sponsors.length,
+            itemBuilder: (context, index) {
+              return _buildPremiumCard(sponsors[index]);
+            },
+          ),
         );
       },
     );
   }
 
-  Widget _buildPremiumCard(Map<String, dynamic> data) {
-    String? imageUrl = data['imageUrl'];
-    String name = data['name'] ?? "Sponsor";
-    String description = data['description'] ?? "";
-
-    // Web panelinden renk seçimi eklemediğimiz için varsayılan renkler atayalım
-    // İstersen web panele renk seçici de ekleyebiliriz ama şimdilik sabit
-    int colorVal = 0xFF00BCD4;
-    IconData icon = Icons.store;
+  Widget _buildPremiumCard(Sponsor sponsor) {
+    String bannerUrl = _dbService.getPublicUrl('sponsors', sponsor.bannerPath);
+    String logoUrl = _dbService.getPublicUrl('sponsors', sponsor.logoPath);
+    String name = sponsor.name;
+    String description = sponsor.description;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 5),
+      margin: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 5),
-          ),
-        ],
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(20),
         child: Stack(
           children: [
-            // 1. ARKA PLAN RESMİ
             Positioned.fill(
-              child: imageUrl != null && imageUrl.isNotEmpty
-                  ? Image.network(
-                      imageUrl,
-                      fit: BoxFit.cover,
-                      errorBuilder: (c, e, s) => Container(
-                        color: Color(colorVal).withOpacity(0.2),
-                        child: const Icon(
-                          Icons.broken_image,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    )
-                  : Container(color: Color(colorVal).withOpacity(0.2)),
+              child: bannerUrl.isNotEmpty
+                  ? Image.network(bannerUrl, fit: BoxFit.cover)
+                  : Container(color: Colors.black12),
             ),
-
-            // 2. KARARTMA GRADYANI
             Positioned.fill(
               child: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.black.withOpacity(0.85),
-                    ],
-                    stops: const [0.4, 1.0],
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [Colors.black.withValues(alpha: 0.7), Colors.transparent],
                   ),
                 ),
               ),
             ),
-
-            // 3. SOL ÜST "SPONSOR" ETİKETİ
             Positioned(
-              top: 12,
-              left: 12,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withOpacity(0.5)),
-                  boxShadow: [
-                    const BoxShadow(color: Colors.black12, blurRadius: 4),
-                  ],
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.verified, color: Colors.amber, size: 14),
-                    SizedBox(width: 4),
-                    Text(
-                      "SPONSOR",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 10,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // 4. İÇERİK METİNLERİ
-            Positioned(
-              bottom: 15,
-              left: 15,
-              right: 15,
+              left: 16,
+              bottom: 16,
+              right: 16,
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
                       shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 2),
                     ),
-                    child: Icon(icon, color: Color(colorVal), size: 24),
+                    child: ClipOval(
+                      child: logoUrl.isNotEmpty
+                          ? Image.network(logoUrl, fit: BoxFit.cover)
+                          : Container(color: Colors.white.withValues(alpha: 0.9)),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
                           name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
                         ),
-                        if (description.isNotEmpty)
-                          Text(
-                            description,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
-                            ),
-                          ),
+                        const SizedBox(height: 4),
+                        Text(
+                          description,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12),
+                        ),
                       ],
                     ),
-                  ),
-                  const Icon(
-                    Icons.arrow_forward_ios,
-                    color: Colors.white70,
-                    size: 16,
                   ),
                 ],
               ),

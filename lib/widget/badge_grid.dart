@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utils/glass_components.dart';
 
 class BadgeGrid extends StatelessWidget {
   final String clubId;
@@ -15,34 +16,30 @@ class BadgeGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('clubs')
-          .doc(clubId)
-          .collection('members')
-          .doc(userId)
-          .collection('badges')
-          .snapshots(),
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: Supabase.instance.client
+          .from('badges')
+          .select()
+          .eq('club_id', clubId)
+          .eq('user_id', userId)
+          .asStream(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return Container(
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          return AuraGlassCard(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(12),
-            ),
+            accentColor: themeColor.withValues(alpha: 0.5),
             child: Column(
               children: [
                 Icon(
                   Icons.emoji_events_outlined,
                   size: 40,
-                  color: Colors.grey[400],
+                  color: Colors.white54,
                 ),
                 const SizedBox(height: 5),
                 const Text(
                   "Henüz kazanılmış rozet yok.",
-                  style: TextStyle(color: Colors.grey),
+                  style: TextStyle(color: Colors.white70),
                 ),
               ],
             ),
@@ -58,25 +55,19 @@ class BadgeGrid extends StatelessWidget {
             mainAxisSpacing: 10,
             childAspectRatio: 0.8,
           ),
-          itemCount: snapshot.data!.docs.length,
+          itemCount: snapshot.data!.length,
           itemBuilder: (context, index) {
-            var badge =
-                snapshot.data!.docs[index].data() as Map<String, dynamic>;
-            return Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 5),
-                ],
-              ),
+            var badge = snapshot.data![index];
+            return AuraGlassCard(
+              padding: EdgeInsets.zero,
+              accentColor: themeColor,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: themeColor.withOpacity(0.1),
+                      color: themeColor.withValues(alpha: 0.3),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(Icons.star, color: themeColor, size: 30),
@@ -88,6 +79,7 @@ class BadgeGrid extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
+                      color: Colors.white,
                     ),
                   ),
                 ],

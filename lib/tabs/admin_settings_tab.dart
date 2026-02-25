@@ -1,7 +1,11 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:unihub/services/database_service.dart';
 import 'package:unihub/utils/hex_color.dart';
+import 'package:unihub/utils/glass_components.dart';
 
 class AdminSettingsTab extends StatefulWidget {
   final String kulupId;
@@ -22,34 +26,16 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
   final _shortNameController = TextEditingController();
   final _categoryController = TextEditingController();
   final _clubDescController = TextEditingController();
+  final DatabaseService _dbService = DatabaseService();
+  final ImagePicker _imagePicker = ImagePicker();
 
   Color _pickerColor = Colors.cyan;
   Color _currentColor = Colors.cyan;
-  String _selectedIconKey = 'groups';
-
-  // İkon Listesi
-  final Map<String, IconData> _clubIcons = {
-    'groups': Icons.groups,
-    'school': Icons.school,
-    'science': Icons.science,
-    'sports_soccer': Icons.sports_soccer,
-    'music_note': Icons.music_note,
-    'brush': Icons.brush,
-    'computer': Icons.computer,
-    'book': Icons.book,
-    'camera_alt': Icons.camera_alt,
-    'theater_comedy': Icons.theater_comedy,
-    'eco': Icons.eco,
-    'gavel': Icons.gavel,
-    'medication': Icons.medication,
-    'work': Icons.work,
-    'flight': Icons.flight,
-    'restaurant': Icons.restaurant,
-    'volunteer_activism': Icons.volunteer_activism,
-    'psychology': Icons.psychology,
-    'pets': Icons.pets,
-    'sports_esports': Icons.sports_esports,
-  };
+  String? _logoPath;
+  String? _bannerPath;
+  Uint8List? _logoBytes;
+  Uint8List? _bannerBytes;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -58,281 +44,437 @@ class _AdminSettingsTabState extends State<AdminSettingsTab> {
   }
 
   void _loadClubSettings() async {
-    var doc = await FirebaseFirestore.instance
-        .collection('clubs')
-        .doc(widget.kulupId)
-        .get();
-    if (doc.exists && mounted) {
-      var data = doc.data()!;
-      setState(() {
-        _clubNameController.text = data['clubName'] ?? '';
-        _shortNameController.text = data['shortName'] ?? '';
-        _categoryController.text = data['category'] ?? '';
-        _clubDescController.text = data['description'] ?? '';
-        _selectedIconKey = data['icon'] ?? 'groups';
-        if (data['theme'] != null && data['theme']['primaryColor'] != null) {
-          _currentColor = hexToColor(data['theme']['primaryColor']);
-          _pickerColor = _currentColor;
-        }
-      });
+    try {
+      final data = await Supabase.instance.client
+          .from('clubs')
+          .select()
+          .eq('id', widget.kulupId)
+          .single();
+      if (mounted) {
+        setState(() {
+          _clubNameController.text = data['name'] ?? '';
+          _shortNameController.text = data['short_name'] ?? '';
+          _categoryController.text = data['category'] ?? '';
+          _clubDescController.text = data['description'] ?? '';
+          _logoPath = data['logo_path'];
+          _bannerPath = data['banner_path'];
+          if (data['main_color'] != null) {
+            _currentColor = hexToColor(data['main_color']);
+            _pickerColor = _currentColor;
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Kulüp ayarları yüklenemedi: $e"), backgroundColor: Colors.red),
+        );
+      }
     }
   }
 
+  Future<void> _pickLogo() async {
+    final result = await _imagePicker.pickImage(source: ImageSource.gallery);
+    if (result != null) {
+      final bytes = await result.readAsBytes();
+      if (mounted) {
+        setState(() {
+          _logoBytes = bytes;
+        });
+      }
+    }
+  }
+
+  Future<void> _pickBanner() async {
+    final result = await _imagePicker.pickImage(source: ImageSource.gallery);
+    if (result != null) {
+      final bytes = await result.readAsBytes();
+      if (mounted) {
+        setState(() {
+          _bannerBytes = bytes;
+        });
+      }
+    }
+  }
+
+  Future<String?> _uploadImage(Uint8List bytes, String folder) async {
+    final fileName = "${DateTime.now().millisecondsSinceEpoch}.jpg";
+    final path = "$folder/$fileName";
+    await Supabase.instance.client.storage.from('clubs').uploadBinary(path, bytes);
+    return path;
+  }
+
   Future<void> _saveSettings() async {
+    setState(() => _isSaving = true);
     try {
-      Color secondaryColor = Color.alphaBlend(
-        Colors.white.withOpacity(0.6),
-        _currentColor,
-      );
-      await FirebaseFirestore.instance
-          .collection('clubs')
-          .doc(widget.kulupId)
+      String? logoPath = _logoPath;
+      String? bannerPath = _bannerPath;
+      if (_logoBytes != null) {
+        logoPath = await _uploadImage(_logoBytes!, 'logos');
+      }
+      if (_bannerBytes != null) {
+        bannerPath = await _uploadImage(_bannerBytes!, 'banners');
+      }
+
+      await Supabase.instance.client
+          .from('clubs')
           .update({
-            'clubName': _clubNameController.text.trim(),
-            'shortName': _shortNameController.text.trim().toUpperCase(),
+            'name': _clubNameController.text.trim(),
+            'short_name': _shortNameController.text.trim().toUpperCase(),
             'category': _categoryController.text.trim(),
             'description': _clubDescController.text.trim(),
-            'icon': _selectedIconKey,
-            'logoUrl': FieldValue.delete(),
-            'theme': {
-              'primaryColor': _colorToHex(_currentColor),
-              'secondaryColor': _colorToHex(secondaryColor),
-            },
-          });
+            'main_color': _colorToHex(_currentColor),
+            'logo_path': logoPath,
+            'banner_path': bannerPath,
+          })
+          .eq('id', widget.kulupId);
+
       if (mounted) {
+        setState(() {
+          _logoPath = logoPath;
+          _bannerPath = bannerPath;
+          _logoBytes = null;
+          _bannerBytes = null;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Ayarlar güncellendi!"),
-            backgroundColor: Colors.green,
-          ),
+          const SnackBar(content: Text("Ayarlar güncellendi!"), backgroundColor: Colors.green),
         );
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Hata: $e"), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Hata: $e"), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
   String _colorToHex(Color color) {
-    return '0xFF${color.value.toRadixString(16).padLeft(8, '0').toUpperCase().substring(2)}';
+    final value = color.toARGB32().toRadixString(16).padLeft(8, '0');
+    return '#${value.substring(2).toUpperCase()}';
   }
 
   void _showColorPickerDialog() {
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Kulüp Rengini Seç'),
-        content: SingleChildScrollView(
-          child: ColorPicker(
-            pickerColor: _pickerColor,
-            onColorChanged: (color) => setState(() => _pickerColor = color),
-            enableAlpha: false,
-            displayThumbColor: true,
-            paletteType: PaletteType.hsvWithHue,
-          ),
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => AuraGlassCard(
+        margin: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(24),
+        borderRadius: 32,
+        accentColor: _pickerColor,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              "TEMA RENGİ SEÇ",
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface,
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1,
+              ),
+            ),
+            const SizedBox(height: 24),
+            ColorPicker(
+              pickerColor: _pickerColor,
+              onColorChanged: (color) => setState(() => _pickerColor = color),
+              enableAlpha: false,
+              displayThumbColor: true,
+              paletteType: PaletteType.hsvWithHue,
+              pickerAreaHeightPercent: 0.5,
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: () {
+                  setState(() => _currentColor = _pickerColor);
+                  Navigator.of(context).pop();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _pickerColor,
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 0,
+                ),
+                child: const Text(
+                  "RENGİ UYGULA",
+                  style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1),
+                ),
+              ),
+            ),
+          ],
         ),
-        actions: <Widget>[
-          ElevatedButton(
-            child: const Text('Tamam'),
-            onPressed: () {
-              setState(() => _currentColor = _pickerColor);
-              Navigator.of(context).pop();
-            },
-          ),
-        ],
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final logoUrl = _dbService.getPublicUrl('clubs', _logoPath);
+    final bannerUrl = _dbService.getPublicUrl('clubs', _bannerPath);
+    final ColorScheme colorScheme = Theme.of(context).colorScheme;
+    final Color onSurface = colorScheme.onSurface;
+    final Color muted = onSurface.withValues(alpha: 0.6);
+    final Color subtle = onSurface.withValues(alpha: 0.4);
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionTitle("Kulüp Kimliği"),
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  TextField(
-                    controller: _clubNameController,
-                    decoration: const InputDecoration(
-                      labelText: "Kulüp Adı",
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 1,
-                        child: TextField(
-                          controller: _shortNameController,
-                          maxLength: 4,
-                          textCapitalization: TextCapitalization.characters,
-                          decoration: const InputDecoration(
-                            labelText: "Kısaltma",
-                            border: OutlineInputBorder(),
-                            counterText: "",
-                          ),
-                        ),
+          _buildSectionHeader("Kulüp Kimliği", true),
+          const SizedBox(height: 16),
+          AuraGlassCard(
+            accentColor: widget.primaryColor,
+            child: Column(
+              children: [
+                AuraGlassTextField(
+                  controller: _clubNameController,
+                  hintText: "Kulüp Adı",
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 1,
+                      child: AuraGlassTextField(
+                        controller: _shortNameController,
+                        hintText: "Kısaltma",
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        flex: 2,
-                        child: TextField(
-                          controller: _categoryController,
-                          decoration: const InputDecoration(
-                            labelText: "Kategori",
-                            border: OutlineInputBorder(),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 15),
-                  TextField(
-                    controller: _clubDescController,
-                    maxLines: 3,
-                    decoration: const InputDecoration(
-                      labelText: "Açıklama",
-                      border: OutlineInputBorder(),
                     ),
-                  ),
-                ],
-              ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: AuraGlassTextField(
+                        controller: _categoryController,
+                        hintText: "Kategori",
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                AuraGlassTextField(
+                  controller: _clubDescController,
+                  hintText: "Açıklama",
+                  maxLines: 4,
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 20),
-          _buildSectionTitle("Görsel Kimlik"),
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "Kulüp İkonu",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.grey,
+          const SizedBox(height: 32),
+          _buildSectionHeader("Görsel Kimlik", false),
+          const SizedBox(height: 16),
+          AuraGlassCard(
+            accentColor: widget.primaryColor,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "KULÜP LOGOSU",
+                  style: TextStyle(
+                    color: muted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: colorScheme.surface.withValues(alpha: 0.9),
+                        border: Border.all(color: onSurface.withValues(alpha: 0.12)),
+                        image: _logoBytes != null
+                            ? DecorationImage(image: MemoryImage(_logoBytes!), fit: BoxFit.cover)
+                            : (logoUrl.isNotEmpty ? DecorationImage(image: NetworkImage(logoUrl), fit: BoxFit.cover) : null),
+                      ),
+                      child: logoUrl.isEmpty && _logoBytes == null
+                          ? Icon(Icons.add_photo_alternate_rounded, color: onSurface.withValues(alpha: 0.3), size: 32)
+                          : null,
+                    ),
+                    const SizedBox(width: 20),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _pickLogo,
+                        icon: const Icon(Icons.camera_alt_rounded, size: 18),
+                        label: const Text("LOGO SEÇ"),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: colorScheme.surface.withValues(alpha: 0.95),
+                          foregroundColor: onSurface,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          elevation: 0,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  "KULÜP BANNER",
+                  style: TextStyle(
+                    color: muted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  height: 140,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    color: colorScheme.surface.withValues(alpha: 0.9),
+                    border: Border.all(color: onSurface.withValues(alpha: 0.12)),
+                    image: _bannerBytes != null
+                        ? DecorationImage(image: MemoryImage(_bannerBytes!), fit: BoxFit.cover)
+                        : (bannerUrl.isNotEmpty
+                            ? DecorationImage(image: NetworkImage(bannerUrl), fit: BoxFit.cover)
+                            : null),
+                  ),
+                  child: bannerUrl.isEmpty && _bannerBytes == null
+                      ? Center(child: Icon(Icons.landscape_rounded, color: onSurface.withValues(alpha: 0.3), size: 48))
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _pickBanner,
+                    icon: const Icon(Icons.image_search_rounded, size: 18),
+                    label: const Text("BANNER SEÇ"),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: colorScheme.surface.withValues(alpha: 0.95),
+                      foregroundColor: onSurface,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      elevation: 0,
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  Container(
-                    height: 200,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey.shade200),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: GridView.builder(
-                      padding: const EdgeInsets.all(8),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 5,
-                            crossAxisSpacing: 8,
-                            mainAxisSpacing: 8,
+                ),
+                const SizedBox(height: 24),
+                Divider(color: onSurface.withValues(alpha: 0.12)),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: _currentColor,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: onSurface.withValues(alpha: 0.2), width: 2),
+                        boxShadow: [
+                          BoxShadow(
+                            color: _currentColor.withValues(alpha: 0.4),
+                            blurRadius: 12,
+                            spreadRadius: 2,
                           ),
-                      itemCount: _clubIcons.length,
-                      itemBuilder: (context, index) {
-                        String key = _clubIcons.keys.elementAt(index);
-                        IconData icon = _clubIcons.values.elementAt(index);
-                        bool isSelected = _selectedIconKey == key;
-                        return GestureDetector(
-                          onTap: () => setState(() => _selectedIconKey = key),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? _currentColor.withOpacity(0.2)
-                                  : Colors.transparent,
-                              border: isSelected
-                                  ? Border.all(color: _currentColor, width: 2)
-                                  : Border.all(color: Colors.grey.shade300),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(
-                              icon,
-                              color: isSelected ? _currentColor : Colors.grey,
-                              size: 28,
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "TEMA RENGİ",
+                            style: TextStyle(
+                              color: onSurface,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 13,
+                              letterSpacing: 0.5,
                             ),
                           ),
-                        );
-                      },
+                          Text(
+                            _colorToHex(_currentColor),
+                            style: TextStyle(
+                              color: subtle,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Divider(),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: CircleAvatar(
-                      backgroundColor: _currentColor,
-                      radius: 20,
-                    ),
-                    title: const Text(
-                      "Tema Rengi",
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Text("Renk kodu: ${_colorToHex(_currentColor)}"),
-                    trailing: ElevatedButton(
+                    ElevatedButton(
                       onPressed: _showColorPickerDialog,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: _currentColor,
-                        foregroundColor: Colors.white,
+                        backgroundColor: widget.primaryColor,
+                        foregroundColor: Colors.black,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
                       ),
-                      child: const Text("Değiştir"),
+                      child: const Text("DEĞİŞTİR"),
                     ),
-                  ),
-                ],
-              ),
+                  ],
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 30),
+          const SizedBox(height: 40),
           SizedBox(
             width: double.infinity,
-            height: 50,
+            height: 60,
             child: ElevatedButton.icon(
-              onPressed: _saveSettings,
-              icon: const Icon(Icons.save),
-              label: const Text("Tüm Değişiklikleri Kaydet"),
+              onPressed: _isSaving ? null : _saveSettings,
+              icon: _isSaving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                    )
+                  : const Icon(Icons.check_circle_rounded),
+              label: Text(
+                _isSaving ? "KAYDEDİLİYOR..." : "AYARLARI KAYDET",
+                style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1),
+              ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: widget.primaryColor,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 0,
               ),
             ),
           ),
-          const SizedBox(height: 50),
+          const SizedBox(height: 60),
         ],
       ),
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 8, bottom: 8),
-      child: Text(
-        title,
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          color: Colors.black87,
+  Widget _buildSectionHeader(String title, bool isActive) {
+    final Color onSurface = Theme.of(context).colorScheme.onSurface;
+    return Row(
+      children: [
+        Container(
+          width: 4,
+          height: 24,
+          decoration: BoxDecoration(
+            color: isActive ? widget.primaryColor : onSurface.withValues(alpha: 0.2),
+            borderRadius: BorderRadius.circular(2),
+          ),
         ),
-      ),
+        const SizedBox(width: 12),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+            color: isActive ? onSurface : onSurface.withValues(alpha: 0.6),
+            letterSpacing: -0.5,
+          ),
+        ),
+      ],
     );
   }
 }

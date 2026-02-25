@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../utils/glass_components.dart';
 
 class EventListTile extends StatelessWidget {
   final String title;
@@ -14,24 +15,25 @@ class EventListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
+    return AuraGlassCard(
       margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      accentColor: themeColor,
+      padding: EdgeInsets.zero,
       child: ListTile(
         leading: Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: themeColor.withOpacity(0.1),
+            color: themeColor.withValues(alpha: 0.3),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(Icons.calendar_month, color: themeColor),
         ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         subtitle: Text(
           description,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
+          style: TextStyle(color: Colors.white70),
         ),
       ),
     );
