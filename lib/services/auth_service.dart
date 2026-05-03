@@ -20,22 +20,28 @@ class AuthService {
     required int departmentId,
     DateTime? birthDate,
     String? studentEmail,
+    required bool privacyAccepted,
+    required String privacyAcceptedAt,
+    required bool termsAccepted,
+    required String termsAcceptedAt,
   }) async {
     try {
-      // 1. Auth Sign Up (with Personal Email)
       final AuthResponse response = await _supabase.auth.signUp(
         email: email,
         password: password,
         data: {
           'first_name': firstName,
           'last_name': lastName,
+          'privacy_accepted': privacyAccepted,
+          'privacy_accepted_at': privacyAcceptedAt,
+          'terms_accepted': termsAccepted,
+          'terms_accepted_at': termsAcceptedAt,
         },
       ).timeout(const Duration(seconds: 20));
 
       final User? user = response.user;
 
       if (user != null) {
-        // 2. Create Profile in 'profiles' table
         await _supabase.from('profiles').insert({
           'id': user.id,
           'first_name': firstName,
@@ -49,6 +55,10 @@ class AuthService {
           'department_id': departmentId,
           'birth_date': birthDate?.toIso8601String(),
           'is_verified': false,
+          'privacy_accepted': privacyAccepted,
+          'privacy_accepted_at': privacyAcceptedAt,
+          'terms_accepted': termsAccepted,
+          'terms_accepted_at': termsAcceptedAt,
           'created_at': DateTime.now().toIso8601String(),
         }).timeout(const Duration(seconds: 20));
       }
@@ -56,10 +66,11 @@ class AuthService {
       return response;
     } on AuthException catch (e) {
       debugPrint("Supabase Auth Error: ${e.message} (Status: ${e.statusCode})");
-      
+
       if (e.message.contains("email rate limit exceeded") || e.statusCode == '429') {
         throw const AuthException(
-            "Güvenlik nedeniyle kısa süreliğine engellendiniz. Lütfen 1-2 dakika bekleyip tekrar deneyin veya farklı bir internet ağına bağlanın.");
+          "Güvenlik nedeniyle kısa süreliğine engellendiniz. Lütfen 1-2 dakika bekleyip tekrar deneyin veya farklı bir internet ağına bağlanın.",
+        );
       } else if (e.message.contains("User already registered")) {
         throw const AuthException("Bu e-posta adresi zaten kayıtlı. Lütfen giriş yapın.");
       } else if (e.message.contains("Password should be at least")) {
@@ -67,6 +78,7 @@ class AuthService {
       } else if (e.message.contains("Email signups are disabled")) {
         throw const AuthException("E-posta ile kayıt olma özelliği şu an kapalıdır.");
       }
+
       rethrow;
     } on TimeoutException {
       throw const AuthException("Bağlantı zaman aşımına uğradı. İnternetinizi kontrol edin.");
@@ -111,6 +123,7 @@ class AuthService {
           .select()
           .eq('id', user.id)
           .single();
+
       return Profile.fromJson(data);
     } catch (e) {
       return null;

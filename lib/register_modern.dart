@@ -1,5 +1,8 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import 'package:kulupi/utils/glass_components.dart';
 import 'package:kulupi/services/auth_service.dart';
 import 'package:kulupi/services/database_service.dart';
@@ -19,17 +22,14 @@ class _ModernRegisterScreenState extends State<ModernRegisterScreen> {
   final AuthService _authService = AuthService();
   final DatabaseService _dbService = DatabaseService();
 
-  // Adım kontrolü
   int _currentStep = 0;
-  
-  // Form kontrolleri
+
   final TextEditingController _firstNameController = TextEditingController();
   final TextEditingController _lastNameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
 
-  // Üniversite bilgileri
   List<University> _universities = [];
   University? _selectedUniversity;
   List<Faculty> _faculties = [];
@@ -37,11 +37,16 @@ class _ModernRegisterScreenState extends State<ModernRegisterScreen> {
   List<Department> _departments = [];
   Department? _selectedDepartment;
 
-  // Diğer bilgiler
   DateTime? _birthDate;
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+
+  // Yeni alanlar
+  bool _acceptedLegal = false;
+
+  static const String _privacyUrl = 'https://www.xn--kulpi-mva.com/privacy';
+  static const String _termsUrl = 'https://www.xn--kulpi-mva.com/terms';
 
   @override
   void initState() {
@@ -68,14 +73,14 @@ class _ModernRegisterScreenState extends State<ModernRegisterScreen> {
 
   Future<void> _loadFaculties() async {
     if (_selectedUniversity == null) return;
-    
+
     setState(() {
       _faculties = [];
       _selectedFaculty = null;
       _departments = [];
       _selectedDepartment = null;
     });
-    
+
     try {
       final faculties = await _dbService.getFaculties(_selectedUniversity!.id);
       if (mounted) {
@@ -90,12 +95,12 @@ class _ModernRegisterScreenState extends State<ModernRegisterScreen> {
 
   Future<void> _loadDepartments() async {
     if (_selectedFaculty == null) return;
-    
+
     setState(() {
       _departments = [];
       _selectedDepartment = null;
     });
-    
+
     try {
       final departments = await _dbService.getDepartments(_selectedFaculty!.id);
       if (mounted) {
@@ -129,6 +134,7 @@ class _ModernRegisterScreenState extends State<ModernRegisterScreen> {
         );
       },
     );
+
     if (picked != null) {
       setState(() {
         _birthDate = picked;
@@ -136,58 +142,146 @@ class _ModernRegisterScreenState extends State<ModernRegisterScreen> {
     }
   }
 
-  Future<void> _register() async {
-    if (_firstNameController.text.isEmpty ||
-        _lastNameController.text.isEmpty ||
-        _emailController.text.isEmpty ||
-        _passwordController.text.isEmpty ||
-        _selectedUniversity == null ||
-        _selectedFaculty == null ||
-        _selectedDepartment == null ||
-        _birthDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Lütfen tüm alanları doldurun")),
-      );
-      return;
+  bool _validateStepOne() {
+    if (_firstNameController.text.trim().isEmpty) {
+      _showSnack("Lütfen isminizi girin");
+      return false;
     }
 
-    if (_passwordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Şifreler uyuşmuyor")),
-      );
-      return;
+    if (_lastNameController.text.trim().isEmpty) {
+      _showSnack("Lütfen soyisminizi girin");
+      return false;
+    }
+
+    if (_emailController.text.trim().isEmpty) {
+      _showSnack("Lütfen email adresinizi girin");
+      return false;
+    }
+
+    final email = _emailController.text.trim();
+    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+    if (!emailRegex.hasMatch(email)) {
+      _showSnack("Lütfen geçerli bir email adresi girin");
+      return false;
+    }
+
+    if (_passwordController.text.isEmpty) {
+      _showSnack("Lütfen şifre girin");
+      return false;
     }
 
     if (_passwordController.text.length < 6) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Şifre en az 6 karakter olmalı")),
-      );
-      return;
+      _showSnack("Şifre en az 6 karakter olmalı");
+      return false;
     }
+
+    if (_confirmPasswordController.text.isEmpty) {
+      _showSnack("Lütfen şifre tekrar alanını doldurun");
+      return false;
+    }
+
+    if (_passwordController.text != _confirmPasswordController.text) {
+      _showSnack("Şifreler uyuşmuyor");
+      return false;
+    }
+
+    if (_birthDate == null) {
+      _showSnack("Lütfen doğum tarihinizi seçin");
+      return false;
+    }
+
+    return true;
+  }
+
+  bool _validateStepTwo() {
+    if (_selectedUniversity == null) {
+      _showSnack("Lütfen üniversite seçin");
+      return false;
+    }
+
+    if (_selectedFaculty == null) {
+      _showSnack("Lütfen fakülte seçin");
+      return false;
+    }
+
+    if (_selectedDepartment == null) {
+      _showSnack("Lütfen bölüm seçin");
+      return false;
+    }
+
+    if (!_acceptedLegal) {
+      _showSnack("Devam etmek için gizlilik politikası ve kullanım koşullarını kabul etmelisiniz");
+      return false;
+    }
+
+    return true;
+  }
+
+  Future<void> _openUrl(String url) async {
+    final uri = Uri.parse(url);
+
+    final launched = await launchUrl(
+      uri,
+      mode: LaunchMode.externalApplication,
+    );
+
+    if (!launched && mounted) {
+      _showSnack("Bağlantı açılamadı");
+    }
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Future<void> _goNextStep() async {
+    if (!_validateStepOne()) return;
+
+    setState(() {
+      _currentStep = 1;
+    });
+  }
+
+  Future<void> _register() async {
+    if (!_validateStepTwo()) return;
 
     setState(() => _isLoading = true);
 
     try {
-      await _authService.signUp(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-        firstName: _firstNameController.text.trim(),
-        lastName: _lastNameController.text.trim(),
-        universityId: _selectedUniversity!.id,
-        facultyId: _selectedFaculty!.id,
-        departmentId: _selectedDepartment!.id,
-        birthDate: _birthDate,
-      );
+      final consentTime = DateTime.now().toUtc().toIso8601String();
+
+await _authService.signUp(
+  email: _emailController.text.trim(),
+  password: _passwordController.text.trim(),
+  firstName: _firstNameController.text.trim(),
+  lastName: _lastNameController.text.trim(),
+  universityId: _selectedUniversity!.id,
+  facultyId: _selectedFaculty!.id,
+  departmentId: _selectedDepartment!.id,
+  birthDate: _birthDate,
+  privacyAccepted: true,
+  privacyAcceptedAt: consentTime,
+  termsAccepted: true,
+  termsAcceptedAt: consentTime,
+);
 
       if (!mounted) return;
-      
+
       showDialog(
         context: context,
         barrierDismissible: false,
         builder: (context) => AlertDialog(
           backgroundColor: const Color(0xFF203A43).withValues(alpha: 0.9),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text("Kayıt Başarılı", style: TextStyle(color: Colors.white)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Text(
+            "Kayıt Başarılı",
+            style: TextStyle(color: Colors.white),
+          ),
           content: const Text(
             "Kaydınız oluşturuldu. Lütfen email adresinizi onaylayın.",
             style: TextStyle(color: Colors.white70),
@@ -198,23 +292,24 @@ class _ModernRegisterScreenState extends State<ModernRegisterScreen> {
                 Navigator.pop(context);
                 Navigator.pop(context);
               },
-              child: const Text("Tamam", style: TextStyle(color: Colors.cyanAccent)),
+              child: const Text(
+                "Tamam",
+                style: TextStyle(color: Colors.cyanAccent),
+              ),
             ),
           ],
         ),
       );
     } on AuthException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Hata: ${e.message}")),
-      );
+      _showSnack("Hata: ${e.message}");
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Bir hata oluştu: $e")),
-      );
+      _showSnack("Bir hata oluştu: $e");
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -227,10 +322,17 @@ class _ModernRegisterScreenState extends State<ModernRegisterScreen> {
         elevation: 0,
         leading: IconButton(
           onPressed: () => Navigator.pop(context),
-          icon: const Icon(Icons.chevron_left_rounded, color: Colors.white, size: 28),
+          icon: const Icon(
+            Icons.chevron_left_rounded,
+            color: Colors.white,
+            size: 28,
+          ),
         ),
         centerTitle: true,
-        title: const Text("Kayıt", style: TextStyle(color: Colors.white)),
+        title: const Text(
+          "Kayıt",
+          style: TextStyle(color: Colors.white),
+        ),
       ),
       body: Column(
         children: [
@@ -270,7 +372,9 @@ class _ModernRegisterScreenState extends State<ModernRegisterScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    _currentStep == 0 ? "Kişisel bilgilerini girelim" : "Üniversite bilgilerini tamamla",
+                    _currentStep == 0
+                        ? "Kişisel bilgilerini girelim"
+                        : "Üniversite bilgilerini tamamla",
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.7),
                       fontSize: 16,
@@ -321,7 +425,9 @@ class _ModernRegisterScreenState extends State<ModernRegisterScreen> {
                           padding: const EdgeInsets.all(8),
                           child: IconButton(
                             icon: Icon(
-                              _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                              _obscurePassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
                               color: Colors.white70,
                             ),
                             onPressed: () {
@@ -352,12 +458,15 @@ class _ModernRegisterScreenState extends State<ModernRegisterScreen> {
                           padding: const EdgeInsets.all(8),
                           child: IconButton(
                             icon: Icon(
-                              _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
+                              _obscureConfirmPassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
                               color: Colors.white70,
                             ),
                             onPressed: () {
                               setState(() {
-                                _obscureConfirmPassword = !_obscureConfirmPassword;
+                                _obscureConfirmPassword =
+                                    !_obscureConfirmPassword;
                               });
                             },
                           ),
@@ -378,7 +487,8 @@ class _ModernRegisterScreenState extends State<ModernRegisterScreen> {
                             Text(
                               _birthDate == null
                                   ? "Doğum tarihinizi seçin"
-                                  : DateFormat('d MMMM yyyy', 'tr_TR').format(_birthDate!),
+                                  : DateFormat('d MMMM yyyy', 'tr_TR')
+                                      .format(_birthDate!),
                               style: const TextStyle(color: Colors.white),
                             ),
                           ],
@@ -393,11 +503,11 @@ class _ModernRegisterScreenState extends State<ModernRegisterScreen> {
                       hint: "Üniversite seçin",
                       items: _universities,
                       itemLabel: (item) => item.name,
-                      onChanged: (value) {
+                      onChanged: (value) async {
                         setState(() {
                           _selectedUniversity = value;
-                          _loadFaculties();
                         });
+                        await _loadFaculties();
                       },
                     ),
                     const SizedBox(height: 20),
@@ -408,11 +518,11 @@ class _ModernRegisterScreenState extends State<ModernRegisterScreen> {
                       hint: "Fakülte seçin",
                       items: _faculties,
                       itemLabel: (item) => item.name,
-                      onChanged: (value) {
+                      onChanged: (value) async {
                         setState(() {
                           _selectedFaculty = value;
-                          _loadDepartments();
                         });
+                        await _loadDepartments();
                       },
                       isDisabled: _selectedUniversity == null,
                     ),
@@ -431,6 +541,77 @@ class _ModernRegisterScreenState extends State<ModernRegisterScreen> {
                       },
                       isDisabled: _selectedFaculty == null,
                     ),
+                    const SizedBox(height: 28),
+                    AuraGlassCard(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Checkbox(
+                            value: _acceptedLegal,
+                            activeColor: AuraTheme.kAccentCyan,
+                            checkColor: Colors.black,
+                            side: const BorderSide(color: Colors.white54),
+                            onChanged: (value) {
+                              setState(() {
+                                _acceptedLegal = value ?? false;
+                              });
+                            },
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 10),
+                              child: RichText(
+                                text: TextSpan(
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.85),
+                                    fontSize: 13.5,
+                                    height: 1.5,
+                                  ),
+                                  children: [
+                                    const TextSpan(
+                                      text: "Kayıt olarak ",
+                                    ),
+                                    TextSpan(
+                                      text: "Gizlilik Politikası",
+                                      style: const TextStyle(
+                                        color: Colors.cyanAccent,
+                                        fontWeight: FontWeight.w600,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                      recognizer: TapGestureRecognizer()
+                                        ..onTap = () {
+                                          _openUrl(_privacyUrl);
+                                        },
+                                    ),
+                                    const TextSpan(text: " ve "),
+                                    TextSpan(
+                                      text: "Kullanım Koşulları",
+                                      style: const TextStyle(
+                                        color: Colors.cyanAccent,
+                                        fontWeight: FontWeight.w600,
+                                        decoration: TextDecoration.underline,
+                                      ),
+                                      recognizer: TapGestureRecognizer()
+                                        ..onTap = () {
+                                          _openUrl(_termsUrl);
+                                        },
+                                    ),
+                                    const TextSpan(
+                                      text: "'nı okuduğumu ve kabul ettiğimi onaylıyorum.",
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                   const SizedBox(height: 40),
                   Row(
@@ -445,7 +626,9 @@ class _ModernRegisterScreenState extends State<ModernRegisterScreen> {
                             },
                             style: OutlinedButton.styleFrom(
                               foregroundColor: Colors.white,
-                              side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+                              side: BorderSide(
+                                color: Colors.white.withValues(alpha: 0.3),
+                              ),
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -458,13 +641,9 @@ class _ModernRegisterScreenState extends State<ModernRegisterScreen> {
                       ],
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: _currentStep == 0
-                              ? () {
-                                  setState(() {
-                                    _currentStep++;
-                                  });
-                                }
-                              : _isLoading ? null : _register,
+                          onPressed: _isLoading
+                              ? null
+                              : (_currentStep == 0 ? _goNextStep : _register),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AuraTheme.kAccentCyan,
                             foregroundColor: Colors.black,
@@ -477,13 +656,16 @@ class _ModernRegisterScreenState extends State<ModernRegisterScreen> {
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
                                 )
                               : Text(_currentStep == 0 ? "Devam" : "Kayıt Ol"),
                         ),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
@@ -506,9 +688,15 @@ class _ModernRegisterScreenState extends State<ModernRegisterScreen> {
       child: DropdownButtonHideUnderline(
         child: DropdownButton<T>(
           value: value,
-          hint: Text(hint, style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
+          hint: Text(
+            hint,
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+          ),
           dropdownColor: const Color(0xFF2C5364).withValues(alpha: 0.95),
-          icon: Icon(Icons.arrow_drop_down, color: isDisabled ? Colors.grey : Colors.white),
+          icon: Icon(
+            Icons.arrow_drop_down,
+            color: isDisabled ? Colors.grey : Colors.white,
+          ),
           style: const TextStyle(color: Colors.white),
           isExpanded: true,
           onChanged: isDisabled ? null : onChanged,

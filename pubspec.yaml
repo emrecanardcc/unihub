@@ -31,6 +31,7 @@ dev_dependencies:
   flutter_lints: ^5.0.0
   # --- EKLENEN PAKET ---
   flutter_launcher_icons: ^0.13.1
+  url_launcher: ^6.3.0
 
 # --- İKON AYARLARI ---
 flutter_launcher_icons:
@@ -46,3 +47,5 @@ flutter:
   # Görseli uygulamanın içinde de kullanacaksan burayı açabilirsin:
   assets:
   - assets/logo.png
+  - assets/mockup2.png
+  - assets/mockup1.png

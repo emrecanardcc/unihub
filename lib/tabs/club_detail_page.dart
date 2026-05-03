@@ -317,8 +317,8 @@ class _ClubDetailPageState extends State<ClubDetailPage> with SingleTickerProvid
                             indicatorSize: TabBarIndicatorSize.tab,
                             tabs: const [
                               Tab(text: "Hikaye"),
-                              Tab(text: "Sahne"),
-                              Tab(text: "Ekip"),
+                              Tab(text: "Etkinlikler"),
+                              Tab(text: "Profilim"),
                             ],
                           ),
                         ),

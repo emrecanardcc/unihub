@@ -5,16 +5,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:kulupi/login.dart'; 
 import 'package:kulupi/main_hub.dart';
 import 'package:kulupi/web_admin/web_admin_dashboard.dart'; 
-import 'package:kulupi/web_landing_page.dart'; // Yeni vitrin sayfamız
+import 'package:kulupi/web_landing_page.dart'; 
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:kulupi/utils/modern_theme.dart';
 import 'package:kulupi/utils/theme_provider.dart';
 import 'package:kulupi/models/profile.dart'; 
 import 'package:kulupi/services/auth_service.dart';
-
-// Eğer kulüp yöneticisi (moderator) paneli dosyan hazırsa aşağıdaki satırın başındaki // işaretini kaldırabilirsin:
-// import 'package:kulupi/web_admin/club_admin_dashboard.dart';
 
 const String supabaseUrl = 'https://kalkeswsmpjlodhwxcfy.supabase.co';
 const String supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImthbGtlc3dzbXBqbG9kaHd4Y2Z5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA4NDIxNzksImV4cCI6MjA4NjQxODE3OX0.RwbhRHTr612tCY16fzgvA0bQ3RWjHCSWukC_GVfMoRo';
@@ -71,9 +68,6 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// --------------------------------------------------------------------------
-// BAKIM MODU KONTROLCÜSÜ
-// --------------------------------------------------------------------------
 class MaintenanceWrapper extends StatelessWidget {
   const MaintenanceWrapper({super.key});
 
@@ -106,9 +100,6 @@ class MaintenanceWrapper extends StatelessWidget {
   }
 }
 
-// --------------------------------------------------------------------------
-// BAKIMDAYIZ EKRANI TASARIMI
-// --------------------------------------------------------------------------
 class MaintenanceScreen extends StatelessWidget {
   const MaintenanceScreen({super.key});
 
@@ -155,9 +146,6 @@ class MaintenanceScreen extends StatelessWidget {
   }
 }
 
-// --------------------------------------------------------------------------
-// ROL BAZLI KULLANICI GİRİŞ KONTROLCÜSÜ (VİTRİN VE MOBİL YÖNLENDİRMELİ)
-// --------------------------------------------------------------------------
 class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});
 
@@ -176,7 +164,6 @@ class AuthWrapper extends StatelessWidget {
         final session = snapshot.data?.session;
         
         if (session != null) {
-          // Kullanıcı giriş yapmış, Rolünü öğreniyoruz
           return FutureBuilder<Profile?>(
             future: AuthService().getCurrentProfile(),
             builder: (context, profileSnapshot) {
@@ -189,34 +176,24 @@ class AuthWrapper extends StatelessWidget {
 
               final profile = profileSnapshot.data;
 
-              // 1. ROL: ADMİN İSE (Senin için, web'den giriyorsa admin paneli)
+              // Admin ise yine admin paneline gider (Eğer token varsa)
               if (profile != null && profile.role == 'admin' && kIsWeb) {
                 return const WebAdminDashboard();
               }
               
-              // 2. ROL: KULÜP YÖNETİCİSİ İSE (İleride ClubAdminDashboard'u bağlayacağın yer)
-              if (profile != null && profile.role == 'moderator' && kIsWeb) {
-                // Eğer club_admin_dashboard.dart dosyan hazırsa alttaki yorumu kaldırabilirsin
-                // return const ClubAdminDashboard(); 
-              }
-              
-              // 3. ROL: NORMAL ÖĞRENCİ İSE
+              // Web ise giriş yapmış olsa bile (normal kullanıcı) landing page görür
               if (kIsWeb) {
-                // Web'den giren öğrenciye Vitrin sayfasını "Giriş Yapılmış" modda aç
-                return const WebLandingPage(isLoggedIn: true);
+                return const WebLandingPage();
               }
               
-              // EĞER KİŞİ MOBİL UYGULAMADAN GİRİYORSA DİREKT MOBİL HUB'I AÇ
+              // Mobilse uygulamaya girer
               return const MainHub();
             },
           );
         } else {
-          // KULLANICI GİRİŞ YAPMAMIŞSA
           if (kIsWeb) {
-            // Cihaz Web tarayıcısı ise yeni vitrin sayfamızı "Giriş Yapılmamış" modda göster
-            return const WebLandingPage(isLoggedIn: false);
+            return const WebLandingPage(); // Web ise kayıtsız şartsız vitrin ekranı
           } else {
-            // Cihaz mobil uygulama ise normal mobil giriş ekranını göster
             return const GirisEkrani();
           }
         }
